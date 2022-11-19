@@ -107,6 +107,11 @@ class BiweeklyPresentableCalendar extends AbstractPresentableCalendar {
 
     @Override
     public @Nullable Event getNextEvent(Instant instant) {
+        return getNextEvent(instant, null);
+    }
+
+    @Override
+    public @Nullable Event getNextEvent(Instant instant, @Nullable EventTextFilter filter) {
         final Collection<VEventWPeriod> candidates = new ArrayList<VEventWPeriod>();
         final Collection<VEvent> negativeEvents = new ArrayList<VEvent>();
         final Collection<VEvent> positiveEvents = new ArrayList<VEvent>();
