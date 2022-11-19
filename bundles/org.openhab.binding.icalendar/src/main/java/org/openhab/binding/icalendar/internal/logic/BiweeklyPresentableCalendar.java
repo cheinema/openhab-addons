@@ -116,7 +116,13 @@ class BiweeklyPresentableCalendar extends AbstractPresentableCalendar {
         final Collection<VEvent> negativeEvents = new ArrayList<VEvent>();
         final Collection<VEvent> positiveEvents = new ArrayList<VEvent>();
         classifyEvents(positiveEvents, negativeEvents);
+        TextFilterMatcher matcher = (filter != null ? new TextFilterMatcher(filter) : null);
         for (final VEvent currentEvent : positiveEvents) {
+            if (matcher != null) {
+                if (!matcher.test(currentEvent)) {
+                    continue;
+                }
+            }
             final DateIterator startDates = this.getRecurredEventDateIterator(currentEvent);
             final Duration duration = getEventLength(currentEvent);
             if (duration == null) {
@@ -288,8 +294,8 @@ class BiweeklyPresentableCalendar extends AbstractPresentableCalendar {
         TextFilterMatcher matcher = (filter != null ? new TextFilterMatcher(filter) : null);
 
         for (final VEvent currentEvent : positiveEvents) {
-            if (matcher != null && matcher.test(currentEvent)) {
-
+            if (matcher != null && !matcher.test(currentEvent)) {
+                continue;
             }
             final DateIterator startDates = this.getRecurredEventDateIterator(currentEvent);
             final Duration duration = getEventLength(currentEvent);
@@ -425,8 +431,18 @@ class BiweeklyPresentableCalendar extends AbstractPresentableCalendar {
             final Summary eventSummary = vEvent.getSummary();
             final String title = eventSummary != null ? eventSummary.getValue() : "-";
             final Description eventDescription = vEvent.getDescription();
-            final String description = eventDescription != null ? eventDescription.getValue() : "";
-            return new Event(title, start, end, description);
+            final String description = eventDescription != null ? eventDescription.getValue() : null;
+            final Location eventLocation = vEvent.getLocation();
+            final String location = eventLocation != null ? eventLocation.getValue() : null;
+            final List<Contact> eventContacts = vEvent.getContacts();
+            final List<String> contactStrings = new ArrayList<>(eventContacts.size());
+            eventContacts.stream().forEach((c) -> contactStrings.add(c.getValue()));
+            final String contact = contactStrings.size() > 0 ? String.join("; ", contactStrings) : null;
+            final List<Comment> eventComments = vEvent.getComments();
+            final List<String> commentStrings = new ArrayList<>(eventComments.size());
+            eventComments.stream().forEach((c) -> commentStrings.add(c.getValue()));
+            final String comment = commentStrings.size() > 0 ? String.join("\n", commentStrings) : null;
+            return new Event(title, start, end, description, location, comment, contact);
         }
     }
 
