@@ -25,6 +25,7 @@ import org.eclipse.jetty.client.HttpClient;
 import org.openhab.binding.icalendar.internal.handler.EventFilterHandler;
 import org.openhab.binding.icalendar.internal.handler.ICalendarHandler;
 import org.openhab.binding.icalendar.internal.handler.LiveEventHandler;
+import org.openhab.binding.icalendar.internal.handler.TagExecutorHandler;
 import org.openhab.core.events.EventPublisher;
 import org.openhab.core.i18n.TimeZoneProvider;
 import org.openhab.core.io.net.http.HttpClientFactory;
@@ -55,7 +56,7 @@ public class ICalendarHandlerFactory extends BaseThingHandlerFactory {
 
     private static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Stream
             .of(Collections.singleton(THING_TYPE_CALENDAR), Collections.singleton(THING_TYPE_FILTERED_EVENTS),
-                    Collections.singleton(THING_TYPE_LIVE_EVENT))
+                    Collections.singleton(THING_TYPE_LIVE_EVENT), Collections.singleton(THING_TYPE_TAG_EXECUTOR))
             .flatMap(Set::stream).collect(Collectors.toSet());
     private final Logger logger = LoggerFactory.getLogger(ICalendarHandlerFactory.class);
 
@@ -85,7 +86,7 @@ public class ICalendarHandlerFactory extends BaseThingHandlerFactory {
         }
         if (thingTypeUID.equals(THING_TYPE_CALENDAR)) {
             if (thing instanceof Bridge) {
-                return new ICalendarHandler((Bridge) thing, sharedHttpClient, eventPublisher, tzProvider);
+                return new ICalendarHandler((Bridge) thing, sharedHttpClient, tzProvider);
             } else {
                 logger.warn(
                         "The API of iCalendar has changed. You have to recreate the calendar according to the docs.");
@@ -94,6 +95,8 @@ public class ICalendarHandlerFactory extends BaseThingHandlerFactory {
             return new EventFilterHandler(thing, tzProvider);
         } else if (thingTypeUID.equals(THING_TYPE_LIVE_EVENT)) {
             return new LiveEventHandler(thing, tzProvider);
+        } else if (thingTypeUID.equals(THING_TYPE_TAG_EXECUTOR)) {
+            return new TagExecutorHandler(thing, eventPublisher);
         }
         return null;
     }
