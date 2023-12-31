@@ -16,9 +16,10 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 
+import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 
@@ -28,7 +29,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
@@ -69,6 +69,8 @@ public class LiveEventHandlerTest {
     private @Mock @NonNullByDefault({}) AbstractPresentableCalendar calendarMock;
 
     private @NonNullByDefault({}) LiveEventHandler handler;
+    private final Instant fakeNow = Instant.parse("2023-12-31T12:00:00Z");
+    private final Clock clock = Clock.fixed(fakeNow, ZoneId.of("UTC"));
     private final Configuration configuration = new Configuration();
 
     @BeforeEach
@@ -87,7 +89,7 @@ public class LiveEventHandlerTest {
 
         doReturn(ZoneId.of("UTC")).when(tzProviderMock).getTimeZone();
 
-        handler = new LiveEventHandler(thingMock, tzProviderMock);
+        handler = new LiveEventHandler(thingMock, tzProviderMock, clock);
         handler.setCallback(callbackMock);
     }
 
@@ -127,14 +129,27 @@ public class LiveEventHandlerTest {
 
     @Test
     public void initializeShouldAskForCurrentEventWithNowInstant() {
-        Instant fakeNow = Instant.parse("2023-12-31T23:59:59Z");
-
-        try (MockedStatic<Instant> mockedStatic = mockStatic(Instant.class)) {
-            mockedStatic.when(Instant::now).thenReturn(fakeNow);
-            handler.initialize();
-        }
+        handler.initialize();
 
         verify(calendarMock).getCurrentEvent(eq(fakeNow), any());
+    }
+
+    @Test
+    public void initializeWithPositiveOffsetConfiguredShouldAskForCurrentEventWithShiftedNowInstant() {
+        configuration.put("offset", BigDecimal.valueOf(66));
+
+        handler.initialize();
+
+        verify(calendarMock).getCurrentEvent(eq(Instant.parse("2023-12-31T12:01:06Z")), any());
+    }
+
+    @Test
+    public void initializeWithNegativeOffsetConfiguredShouldAskForCurrentEventWithShiftedNowInstant() {
+        configuration.put("offset", BigDecimal.valueOf(-66));
+
+        handler.initialize();
+
+        verify(calendarMock).getCurrentEvent(eq(Instant.parse("2023-12-31T11:58:54Z")), any());
     }
 
     @Test
@@ -180,14 +195,27 @@ public class LiveEventHandlerTest {
 
     @Test
     public void initializeShouldAskForNextEventWithNowInstant() {
-        Instant fakeNow = Instant.parse("2023-12-31T23:59:59Z");
-
-        try (MockedStatic<Instant> mockedStatic = mockStatic(Instant.class)) {
-            mockedStatic.when(Instant::now).thenReturn(fakeNow);
-            handler.initialize();
-        }
+        handler.initialize();
 
         verify(calendarMock).getNextEvent(eq(fakeNow), any());
+    }
+
+    @Test
+    public void initializeWithPositiveOffsetConfiguredShouldAskForNextEventWithShiftedNowInstant() {
+        configuration.put("offset", BigDecimal.valueOf(66));
+
+        handler.initialize();
+
+        verify(calendarMock).getNextEvent(eq(Instant.parse("2023-12-31T12:01:06Z")), any());
+    }
+
+    @Test
+    public void initializeWithNegativeOffsetConfiguredShouldAskForNextEventWithShiftedNowInstant() {
+        configuration.put("offset", BigDecimal.valueOf(-66));
+
+        handler.initialize();
+
+        verify(calendarMock).getNextEvent(eq(Instant.parse("2023-12-31T11:58:54Z")), any());
     }
 
     @Test
@@ -224,5 +252,26 @@ public class LiveEventHandlerTest {
         verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_location")), eq(UnDefType.UNDEF));
         verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_comment")), eq(UnDefType.UNDEF));
         verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_contact")), eq(UnDefType.UNDEF));
+    }
+
+    @Test
+    public void initializeWithLoadedCalendarShouldSetThingStatusToOffline() {
+        doReturn(calendarMock).when(iCalendarHandlerMock).getRuntimeCalendar();
+
+        handler.initialize();
+
+        verify(callbackMock).statusUpdated(eq(thingMock), argThat(arg -> arg.getStatus().equals(ThingStatus.ONLINE)));
+    }
+
+    @Test
+    public void initializeWithoutLoadedCalendarShouldSetThingStatusToOffline() {
+        doReturn(null).when(iCalendarHandlerMock).getRuntimeCalendar();
+
+        handler.initialize();
+
+        verify(callbackMock).statusUpdated(eq(thingMock),
+                argThat(arg -> arg.getStatus().equals(ThingStatus.OFFLINE)
+                        && arg.getStatusDetail() == ThingStatusDetail.COMMUNICATION_ERROR
+                        && "Calendar has not been retrieved yet.".equals(arg.getDescription())));
     }
 }

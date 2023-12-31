@@ -29,6 +29,7 @@ import static org.openhab.binding.icalendar.internal.ICalendarBindingConstants.C
 import static org.openhab.binding.icalendar.internal.ICalendarBindingConstants.CHANNEL_NEXT_EVENT_SUMMARY;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.concurrent.ScheduledFuture;
@@ -70,12 +71,18 @@ public class LiveEventHandler extends BaseThingHandler implements CalendarUpdate
     private @Nullable LiveEventConfiguration configuration;
     private final Logger logger = LoggerFactory.getLogger(LiveEventHandler.class);
     private final TimeZoneProvider tzProvider;
+    private final Clock clock;
     private @Nullable ScheduledFuture<?> updateFuture;
     private @Nullable AbstractPresentableCalendar calendar;
 
     public LiveEventHandler(Thing thing, TimeZoneProvider tzProvider) {
+        this(thing, tzProvider, Clock.systemDefaultZone());
+    }
+
+    LiveEventHandler(Thing thing, TimeZoneProvider tzProvider, Clock clock) {
         super(thing);
         this.tzProvider = tzProvider;
+        this.clock = clock;
     }
 
     @Override
@@ -190,7 +197,7 @@ public class LiveEventHandler extends BaseThingHandler implements CalendarUpdate
         if (cal != null) {
             updateStatus(ThingStatus.ONLINE);
 
-            Instant reference = Instant.now().plus(offset, ChronoUnit.SECONDS);
+            Instant reference = Instant.now(clock).plus(offset, ChronoUnit.SECONDS);
             EventTextFilter filter = null;
 
             try {
@@ -291,7 +298,7 @@ public class LiveEventHandler extends BaseThingHandler implements CalendarUpdate
             return;
         }
         final long offset = currentOffsetPre.longValue();
-        final Instant now = Instant.now().plus(offset, ChronoUnit.SECONDS);
+        final Instant now = Instant.now(clock).plus(offset, ChronoUnit.SECONDS);
         Instant nextRegularUpdate = null;
         if (currentCalendar.isEventPresent(now)) {
             final Event currentEvent = currentCalendar.getCurrentEvent(now);
