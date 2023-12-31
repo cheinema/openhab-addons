@@ -26,6 +26,7 @@ import java.time.ZoneId;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -98,180 +99,193 @@ public class LiveEventHandlerTest {
         handler.dispose();
     }
 
-    @Test
-    public void initializeWithNullBridgeShouldSetThingStatusToOffline() {
-        doReturn(null).when(callbackMock).getBridge(BRIDGE_UID);
+    /**
+     * Tests {@link LiveEventHandler#initialize()}.
+     */
+    @Nested
+    class InitializeTests {
 
-        handler.initialize();
+        @Test
+        public void shouldSetThingStatusToOfflineIfBridgeIsNull() {
+            doReturn(null).when(callbackMock).getBridge(BRIDGE_UID);
 
-        verify(callbackMock).statusUpdated(eq(thingMock), argThat(arg -> arg.getStatus().equals(ThingStatus.OFFLINE)
-                && arg.getStatusDetail() == ThingStatusDetail.CONFIGURATION_ERROR));
-    }
+            handler.initialize();
 
-    @Test
-    public void initializeWithOfflineBridgeShouldSetThingStatusToOffline() {
-        doReturn(ThingStatus.OFFLINE).when(bridgeMock).getStatus();
+            verify(callbackMock).statusUpdated(eq(thingMock), argThat(arg -> arg.getStatus().equals(ThingStatus.OFFLINE)
+                    && arg.getStatusDetail() == ThingStatusDetail.CONFIGURATION_ERROR));
+        }
 
-        handler.initialize();
+        @Test
+        public void shouldSetThingStatusToOfflineIfBridgeIsOffline() {
+            doReturn(ThingStatus.OFFLINE).when(bridgeMock).getStatus();
 
-        verify(callbackMock).statusUpdated(eq(thingMock), argThat(arg -> arg.getStatus().equals(ThingStatus.OFFLINE)
-                && arg.getStatusDetail() == ThingStatusDetail.BRIDGE_OFFLINE));
-    }
+            handler.initialize();
 
-    @Test
-    public void initializeWithOnlineBridgeShouldSetThingStatusToOnline() {
-        doReturn(ThingStatus.ONLINE).when(bridgeMock).getStatus();
+            verify(callbackMock).statusUpdated(eq(thingMock), argThat(arg -> arg.getStatus().equals(ThingStatus.OFFLINE)
+                    && arg.getStatusDetail() == ThingStatusDetail.BRIDGE_OFFLINE));
+        }
 
-        handler.initialize();
+        @Test
+        public void shouldSetThingStatusToOnlineIfBridgeIsOnline() {
+            doReturn(ThingStatus.ONLINE).when(bridgeMock).getStatus();
 
-        verify(callbackMock).statusUpdated(eq(thingMock), argThat(arg -> arg.getStatus().equals(ThingStatus.UNKNOWN)));
-    }
+            handler.initialize();
 
-    @Test
-    public void initializeShouldAskForCurrentEventWithNowInstant() {
-        handler.initialize();
+            verify(callbackMock).statusUpdated(eq(thingMock),
+                    argThat(arg -> arg.getStatus().equals(ThingStatus.UNKNOWN)));
+        }
 
-        verify(calendarMock).getCurrentEvent(eq(fakeNow), any());
-    }
+        @Test
+        public void shouldAskForCurrentEventWithNowInstant() {
+            handler.initialize();
 
-    @Test
-    public void initializeWithPositiveOffsetConfiguredShouldAskForCurrentEventWithShiftedNowInstant() {
-        configuration.put("offset", BigDecimal.valueOf(66));
+            verify(calendarMock).getCurrentEvent(eq(fakeNow), any());
+        }
 
-        handler.initialize();
+        @Test
+        public void shouldAskForCurrentEventWithShiftedInstantIfPositiveOffsetIsConfigured() {
+            configuration.put("offset", BigDecimal.valueOf(66));
 
-        verify(calendarMock).getCurrentEvent(eq(Instant.parse("2023-12-31T12:01:06Z")), any());
-    }
+            handler.initialize();
 
-    @Test
-    public void initializeWithNegativeOffsetConfiguredShouldAskForCurrentEventWithShiftedNowInstant() {
-        configuration.put("offset", BigDecimal.valueOf(-66));
+            verify(calendarMock).getCurrentEvent(eq(Instant.parse("2023-12-31T12:01:06Z")), any());
+        }
 
-        handler.initialize();
+        @Test
+        public void shouldAskForCurrentEventWithShiftedInstantIfNegativeOffsetIsConfigured() {
+            configuration.put("offset", BigDecimal.valueOf(-66));
 
-        verify(calendarMock).getCurrentEvent(eq(Instant.parse("2023-12-31T11:58:54Z")), any());
-    }
+            handler.initialize();
 
-    @Test
-    public void initializeWithCurrentCalenderEventShouldSetChannelsWithEventData() {
-        Event event = new Event("summary", Instant.parse("2023-12-31T11:23:45Z"), Instant.parse("2023-12-31T12:34:56Z"),
-                "description", "location", "comment", "contact");
-        doReturn(event).when(calendarMock).getCurrentEvent(any(), any());
+            verify(calendarMock).getCurrentEvent(eq(Instant.parse("2023-12-31T11:58:54Z")), any());
+        }
 
-        handler.initialize();
+        @Test
+        public void shouldSetChannelsWithEventDataIfCurrentEventExists() {
+            Event event = new Event("summary", Instant.parse("2023-12-31T11:23:45Z"),
+                    Instant.parse("2023-12-31T12:34:56Z"), "description", "location", "comment", "contact");
+            doReturn(event).when(calendarMock).getCurrentEvent(any(), any());
 
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_presence")), eq(OnOffType.ON));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_summary")),
-                eq(new StringType("summary")));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_start")),
-                eq(new DateTimeType("2023-12-31T11:23:45Z")));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_end")),
-                eq(new DateTimeType("2023-12-31T12:34:56Z")));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_description")),
-                eq(new StringType("description")));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_location")),
-                eq(new StringType("location")));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_comment")),
-                eq(new StringType("comment")));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_contact")),
-                eq(new StringType("contact")));
-    }
+            handler.initialize();
 
-    @Test
-    public void initializeWithoutCurrentCalenderEventShouldResetChannels() {
-        doReturn(null).when(calendarMock).getCurrentEvent(any(), any());
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_presence")), eq(OnOffType.ON));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_summary")),
+                    eq(new StringType("summary")));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_start")),
+                    eq(new DateTimeType("2023-12-31T11:23:45Z")));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_end")),
+                    eq(new DateTimeType("2023-12-31T12:34:56Z")));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_description")),
+                    eq(new StringType("description")));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_location")),
+                    eq(new StringType("location")));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_comment")),
+                    eq(new StringType("comment")));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_contact")),
+                    eq(new StringType("contact")));
+        }
 
-        handler.initialize();
+        @Test
+        public void shouldResetChannelsIfCurrentEventIsMissing() {
+            doReturn(null).when(calendarMock).getCurrentEvent(any(), any());
 
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_presence")), eq(OnOffType.OFF));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_summary")), eq(UnDefType.UNDEF));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_start")), eq(UnDefType.UNDEF));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_end")), eq(UnDefType.UNDEF));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_description")), eq(UnDefType.UNDEF));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_location")), eq(UnDefType.UNDEF));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_comment")), eq(UnDefType.UNDEF));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_contact")), eq(UnDefType.UNDEF));
-    }
+            handler.initialize();
 
-    @Test
-    public void initializeShouldAskForNextEventWithNowInstant() {
-        handler.initialize();
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_presence")), eq(OnOffType.OFF));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_summary")), eq(UnDefType.UNDEF));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_start")), eq(UnDefType.UNDEF));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_end")), eq(UnDefType.UNDEF));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_description")),
+                    eq(UnDefType.UNDEF));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_location")), eq(UnDefType.UNDEF));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_comment")), eq(UnDefType.UNDEF));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "current_contact")), eq(UnDefType.UNDEF));
+        }
 
-        verify(calendarMock).getNextEvent(eq(fakeNow), any());
-    }
+        @Test
+        public void shouldAskForNextEventWithNowInstant() {
+            handler.initialize();
 
-    @Test
-    public void initializeWithPositiveOffsetConfiguredShouldAskForNextEventWithShiftedNowInstant() {
-        configuration.put("offset", BigDecimal.valueOf(66));
+            verify(calendarMock).getNextEvent(eq(fakeNow), any());
+        }
 
-        handler.initialize();
+        @Test
+        public void shouldAskForNextEventWithShiftedInstantIfPositiveOffsetIsConfigured() {
+            configuration.put("offset", BigDecimal.valueOf(66));
 
-        verify(calendarMock).getNextEvent(eq(Instant.parse("2023-12-31T12:01:06Z")), any());
-    }
+            handler.initialize();
 
-    @Test
-    public void initializeWithNegativeOffsetConfiguredShouldAskForNextEventWithShiftedNowInstant() {
-        configuration.put("offset", BigDecimal.valueOf(-66));
+            verify(calendarMock).getNextEvent(eq(Instant.parse("2023-12-31T12:01:06Z")), any());
+        }
 
-        handler.initialize();
+        @Test
+        public void shouldAskForNextEventWithShiftedInstantIfNegativeOffsetIsConfigured() {
+            configuration.put("offset", BigDecimal.valueOf(-66));
 
-        verify(calendarMock).getNextEvent(eq(Instant.parse("2023-12-31T11:58:54Z")), any());
-    }
+            handler.initialize();
 
-    @Test
-    public void initializeWithNextCalenderEventShouldSetChannelsWithEventData() {
-        Event event = new Event("summary", Instant.parse("2023-12-31T11:23:45Z"), Instant.parse("2023-12-31T12:34:56Z"),
-                "description", "location", "comment", "contact");
-        doReturn(event).when(calendarMock).getNextEvent(any(), any());
+            verify(calendarMock).getNextEvent(eq(Instant.parse("2023-12-31T11:58:54Z")), any());
+        }
 
-        handler.initialize();
+        @Test
+        public void shouldSetChannelsWithEventDataIfNextEventExists() {
+            Event event = new Event("summary", Instant.parse("2023-12-31T11:23:45Z"),
+                    Instant.parse("2023-12-31T12:34:56Z"), "description", "location", "comment", "contact");
+            doReturn(event).when(calendarMock).getNextEvent(any(), any());
 
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_summary")), eq(new StringType("summary")));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_start")),
-                eq(new DateTimeType("2023-12-31T11:23:45Z")));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_end")),
-                eq(new DateTimeType("2023-12-31T12:34:56Z")));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_description")),
-                eq(new StringType("description")));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_location")),
-                eq(new StringType("location")));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_comment")), eq(new StringType("comment")));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_contact")), eq(new StringType("contact")));
-    }
+            handler.initialize();
 
-    @Test
-    public void initializeWithoutNextCalenderEventShouldResetChannels() {
-        doReturn(null).when(calendarMock).getNextEvent(any(), any());
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_summary")),
+                    eq(new StringType("summary")));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_start")),
+                    eq(new DateTimeType("2023-12-31T11:23:45Z")));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_end")),
+                    eq(new DateTimeType("2023-12-31T12:34:56Z")));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_description")),
+                    eq(new StringType("description")));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_location")),
+                    eq(new StringType("location")));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_comment")),
+                    eq(new StringType("comment")));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_contact")),
+                    eq(new StringType("contact")));
+        }
 
-        handler.initialize();
+        @Test
+        public void shouldResetChannelsIfNextEventIsMissing() {
+            doReturn(null).when(calendarMock).getNextEvent(any(), any());
 
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_summary")), eq(UnDefType.UNDEF));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_start")), eq(UnDefType.UNDEF));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_end")), eq(UnDefType.UNDEF));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_description")), eq(UnDefType.UNDEF));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_location")), eq(UnDefType.UNDEF));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_comment")), eq(UnDefType.UNDEF));
-        verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_contact")), eq(UnDefType.UNDEF));
-    }
+            handler.initialize();
 
-    @Test
-    public void initializeWithLoadedCalendarShouldSetThingStatusToOffline() {
-        doReturn(calendarMock).when(iCalendarHandlerMock).getRuntimeCalendar();
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_summary")), eq(UnDefType.UNDEF));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_start")), eq(UnDefType.UNDEF));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_end")), eq(UnDefType.UNDEF));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_description")), eq(UnDefType.UNDEF));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_location")), eq(UnDefType.UNDEF));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_comment")), eq(UnDefType.UNDEF));
+            verify(callbackMock).stateUpdated(eq(new ChannelUID(THING_UID, "next_contact")), eq(UnDefType.UNDEF));
+        }
 
-        handler.initialize();
+        @Test
+        public void shouldSetThingStatusToOnlineIfCalenderHasBeenLoaded() {
+            doReturn(calendarMock).when(iCalendarHandlerMock).getRuntimeCalendar();
 
-        verify(callbackMock).statusUpdated(eq(thingMock), argThat(arg -> arg.getStatus().equals(ThingStatus.ONLINE)));
-    }
+            handler.initialize();
 
-    @Test
-    public void initializeWithoutLoadedCalendarShouldSetThingStatusToOffline() {
-        doReturn(null).when(iCalendarHandlerMock).getRuntimeCalendar();
+            verify(callbackMock).statusUpdated(eq(thingMock),
+                    argThat(arg -> arg.getStatus().equals(ThingStatus.ONLINE)));
+        }
 
-        handler.initialize();
+        @Test
+        public void shouldSetThingStatusToOfflineIfCalenderHasNotBeenLoadedYet() {
+            doReturn(null).when(iCalendarHandlerMock).getRuntimeCalendar();
 
-        verify(callbackMock).statusUpdated(eq(thingMock),
-                argThat(arg -> arg.getStatus().equals(ThingStatus.OFFLINE)
-                        && arg.getStatusDetail() == ThingStatusDetail.COMMUNICATION_ERROR
-                        && "Calendar has not been retrieved yet.".equals(arg.getDescription())));
+            handler.initialize();
+
+            verify(callbackMock).statusUpdated(eq(thingMock),
+                    argThat(arg -> arg.getStatus().equals(ThingStatus.OFFLINE)
+                            && arg.getStatusDetail() == ThingStatusDetail.COMMUNICATION_ERROR
+                            && "Calendar has not been retrieved yet.".equals(arg.getDescription())));
+        }
     }
 }
